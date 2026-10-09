@@ -1,0 +1,36 @@
+{
+    "name": "vedastro/vedastro",
+    "description": "Official PHP client for the VedAstro Vedic astrology API — 684 calculations, zero runtime dependencies",
+    "type": "library",
+    "keywords": ["vedastro", "vedic-astrology", "astrology", "jyotish", "panchanga", "horoscope", "api"],
+    "homepage": "https://vedastro.org",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.1",
+        "ext-json": "*"
+    },
+    "suggest": {
+        "ext-curl": "Preferred transport; the SDK falls back to PHP's HTTP stream wrapper when cURL is absent",
+        "ext-openssl": "Required for HTTPS requests when using the stream transport"
+    },
+    "autoload": {
+        "psr-4": {
+            "VedAstro\\": "src/"
+        },
+        "files": [
+            "src/Generated/Options.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "VedAstro\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "php tests/run.php",
+        "lint": "php tests/lint.php"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

@@ -25,12 +25,6 @@ use VedAstro\VedAstroClient;
 $key = getenv('VEDASTRO_API_KEY');
 $freeTier = $key === false || trim($key) === '';
 
-$client = new VedAstroClient([
-    'apiKey' => $freeTier ? 'FreeAPIUser' : $key,
-    'timeout' => 60,
-]);
-$birth = Time::of('14:30 25/10/1992 +05:30', GeoLocation::of('Mumbai', 72.8777, 19.0760));
-
 $failures = [];
 
 /** Runs a check, pacing the free tier, and reports the outcome. */
@@ -49,11 +43,48 @@ function check(string $label, callable $action, bool $freeTier, array &$failures
     }
 }
 
-echo 'VedAstro PHP SDK — live check against ', VedAstroClient::DEFAULT_BASE_URL, PHP_EOL,
-    'transport: ', extension_loaded('curl') ? 'cURL' : 'stream wrapper', PHP_EOL, PHP_EOL;
+// Both transports are exercised, so a TLS configuration problem in either one shows up here
+// rather than in production. VEDASTRO_TRANSPORT=stream|curl picks just one.
+$requested = getenv('VEDASTRO_TRANSPORT');
+$transports = match ($requested) {
+    'curl' => ['cURL' => extension_loaded('curl') ? new VedAstro\CurlTransport() : null],
+    'stream' => ['stream wrapper' => new VedAstro\StreamTransport()],
+    default => [
+        'stream wrapper' => new VedAstro\StreamTransport(),
+        'cURL' => extension_loaded('curl') ? new VedAstro\CurlTransport() : null,
+    ],
+};
 
-check('Sun sign', static function () use ($client, $birth): string {
-    $sun = $client->calculate()->planetRasiD1Sign(PlanetName::SUN, $birth);
+echo 'VedAstro PHP SDK — live check against ', VedAstroClient::DEFAULT_BASE_URL, PHP_EOL, PHP_EOL;
+
+foreach ($transports as $transportName => $transport) {
+    if ($transport === null) {
+        printf("transport: %s — skipped (extension not loaded)\n\n", $transportName);
+        continue;
+    }
+
+    // cURL cannot verify TLS without a CA bundle, which many PHP builds leave unconfigured.
+    // Report that rather than a wall of certificate errors.
+    if ($transport instanceof VedAstro\CurlTransport && $transport->caBundle() === null) {
+        printf(
+            "transport: %s — skipped (no CA bundle; set curl.cainfo in php.ini)\n\n",
+            $transportName
+        );
+        continue;
+    }
+
+    printf("transport: %s\n\n", $transportName);
+
+    $client = new VedAstroClient([
+        'apiKey' => $freeTier ? 'FreeAPIUser' : $key,
+        'timeout' => 60,
+        'silent' => true,
+        'transport' => $transport,
+    ]);
+    $birth = Time::of('14:30 25/10/1992 +05:30', GeoLocation::of('Mumbai', 72.8777, 19.0760));
+
+    check('Sun sign', static function () use ($client, $birth): string {
+        $sun = $client->calculate()->planetRasiD1Sign(PlanetName::SUN, $birth);
 
     return Response::string($sun, 'Name')
         . ' at ' . Response::string($sun, ['DegreesIn', 'DegreeMinuteSecond']);
@@ -86,9 +117,10 @@ check('RAG search', static function () use ($client): string {
     $passages = $client->calculate()->searchSourceText('effects of Saturn in the 7th house');
 
     return Response::count($passages) . ' passage(s)';
-}, $freeTier, $failures);
+    }, $freeTier, $failures);
 
-echo PHP_EOL;
+    echo PHP_EOL;
+}
 
 if ($failures !== []) {
     echo 'live check failures:', PHP_EOL;

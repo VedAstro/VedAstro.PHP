@@ -220,10 +220,18 @@ final class VedAstroClient
         return $this->decode($endpoint, $response);
     }
 
-    /** Chooses cURL when it is available, and the stream wrapper otherwise. */
+    /**
+     * The default transport: PHP's HTTP stream wrapper.
+     *
+     * The stream wrapper is chosen over cURL deliberately. It finds a certificate authority bundle
+     * through `openssl` on any normal build, whereas cURL needs `curl.cainfo` configured in
+     * php.ini and otherwise fails with "unable to get local issuer certificate" - a configuration
+     * trap that is easy to miss until it reaches production. Pass
+     * `['transport' => new CurlTransport()]` when cURL is set up correctly and you want it.
+     */
     private static function defaultTransport(int $timeout): Transport
     {
-        return extension_loaded('curl') ? new CurlTransport($timeout) : new StreamTransport($timeout);
+        return new StreamTransport($timeout);
     }
 
     private function decode(string $endpoint, TransportResponse $response): ApiResponse

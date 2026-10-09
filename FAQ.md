@@ -6,13 +6,20 @@ for each of them.
 **Which PHP versions are supported?** PHP 8.1 or newer. The library uses native backed enums,
 readonly properties and constructor property promotion, all of which are standard from 8.1.
 
-**Does it have any dependencies?** No runtime dependencies. `json` is used for encoding and
-decoding, cURL when the extension is loaded, and PHP's HTTP stream wrapper otherwise. PHPUnit is
-not needed either: the test suite is a plain PHP script.
+**Does it have any dependencies?** No runtime dependencies. `json` handles encoding and decoding,
+and PHP's HTTP stream wrapper handles transport. PHPUnit is not needed either: the test suite is a
+plain PHP script.
 
-**Which extensions do I need?** Only `json`, which is bundled and enabled by default. cURL is
-preferred when present but optional. HTTPS through the stream transport needs `openssl`, which is
-present in essentially every PHP build; on the rare build without it, enable cURL instead.
+**Which extensions do I need?** Only `json`, which is bundled and enabled by default. The default
+transport is PHP's HTTP stream wrapper, which needs `openssl` for HTTPS — present in essentially
+every PHP build.
+
+**How do I use cURL instead?** Pass it explicitly: `['transport' => new CurlTransport()]`. cURL is
+not the default because it needs a certificate authority bundle: on a build without `curl.cainfo`
+set in php.ini it fails with "SSL certificate problem: unable to get local issuer certificate",
+whereas the stream wrapper finds a bundle through `openssl` automatically. `CurlTransport` looks in
+`curl.cainfo`, then `openssl.cafile`, then the usual system locations, and
+`CurlTransport::caBundle()` reports what it found (null means it found nothing).
 
 **How do I install it?** `composer require vedastro/vedastro`. Without Composer, include
 `src/autoload.php` (or `src/VedAstro.php`) directly — the repository ships both.

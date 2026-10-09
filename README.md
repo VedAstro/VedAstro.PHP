@@ -23,9 +23,15 @@ Perfect for:
 - 📊 **Astrological research** - Batch process thousands of charts
 - 🌟 **Numerology calculators** - Chaldean system with life aspect scores
 
-**Zero runtime dependencies.** The library uses only PHP itself — `json_encode`/`json_decode`, the
-cURL extension when present, and PHP's HTTP stream wrapper otherwise — so it drops into Laravel,
-Symfony, Slim or plain PHP-FPM without a dependency tree to resolve.
+**Zero runtime dependencies.** The library uses only PHP itself — `json_encode`/`json_decode` for
+JSON and PHP's HTTP stream wrapper for transport — so it drops into Laravel, Symfony, Slim or plain
+PHP-FPM without a dependency tree to resolve.
+
+The default transport is the **stream wrapper**, deliberately: it finds a certificate authority
+bundle through `openssl` on any normal build. cURL needs `curl.cainfo` configured in php.ini and
+otherwise fails with "unable to get local issuer certificate" — a trap that is easy to miss until
+it reaches production. Pass `['transport' => new CurlTransport()]` when cURL is configured
+correctly and you want it.
 
 ---
 
@@ -857,7 +863,8 @@ VedAstro's servers.
 **Why this design?**
 - ✅ Zero third-party dependencies — JSON, enums and transport are all built in
 - ✅ Instant updates (684 calculations, always the latest, with no client release needed)
-- ✅ No extensions required beyond `json`; cURL is used when available, the stream wrapper otherwise
+- ✅ No extensions required beyond `json`; transport is the built-in HTTP stream wrapper, with an
+  opt-in cURL transport when you want it
 - ✅ Cross-platform (any PHP 8.1+ on Linux, macOS or Windows)
 
 ---

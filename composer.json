@@ -10,8 +10,8 @@
         "ext-json": "*"
     },
     "suggest": {
-        "ext-curl": "Preferred transport; the SDK falls back to PHP's HTTP stream wrapper when cURL is absent",
-        "ext-openssl": "Required for HTTPS requests when using the stream transport"
+        "ext-curl": "Optional alternative transport; the default uses PHP's HTTP stream wrapper, which needs no configuration",
+        "ext-openssl": "Required for HTTPS requests with the default stream transport"
     },
     "autoload": {
         "psr-4": {

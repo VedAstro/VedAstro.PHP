@@ -531,10 +531,13 @@ $suite->test('performs a real HTTP round trip through the stream transport', fun
     $baseUrl = StreamWrapperFixture::SCHEME . '://api/Calculate';
 
     try {
+        // The stream transport is pinned rather than auto-selected, because the default picks
+        // cURL when that extension is loaded - and cURL cannot speak a custom PHP stream scheme.
         $client = new VedAstroClient([
             'apiKey' => 'test-key',
             'baseUrl' => $baseUrl,
             'silent' => true,
+            'transport' => new \VedAstro\StreamTransport(),
         ]);
 
         // A realistic envelope, exactly as the live service sends it.

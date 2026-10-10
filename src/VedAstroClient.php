@@ -31,7 +31,7 @@ use VedAstro\Generated\Ayanamsa;
  * @phpstan-type ClientOptions array{
  *     apiKey?: string|null,
  *     baseUrl?: string,
- *     timeout?: int,
+ *     timeout?: int|null,
  *     transport?: Transport,
  *     defaultAyanamsa?: Ayanamsa|null,
  *     silent?: bool,
@@ -41,9 +41,6 @@ final class VedAstroClient
 {
     /** The public calculator service. */
     public const DEFAULT_BASE_URL = 'https://vedastro.zaishi.net/api/Calculate';
-
-    /** The default per-request timeout, in seconds. */
-    public const DEFAULT_TIMEOUT = 120;
 
     /** The release version. */
     public const VERSION = '1.0.0';
@@ -64,7 +61,7 @@ final class VedAstroClient
      * @param array{
      *     apiKey?: string|null,
      *     baseUrl?: string,
-     *     timeout?: int,
+     *     timeout?: int|null,
      *     transport?: Transport,
      *     defaultAyanamsa?: Ayanamsa|null,
      *     silent?: bool,
@@ -81,8 +78,12 @@ final class VedAstroClient
         }
         $this->baseUrl = rtrim(trim($baseUrl), '/');
 
-        $timeout = $options['timeout'] ?? self::DEFAULT_TIMEOUT;
-        if (!is_int($timeout) || $timeout <= 0) {
+        // No request deadline unless the caller sets one. A VedAstro calculation can legitimately
+        // take minutes, and a library has no way to know what is safe for the caller's workload -
+        // so imposing one would be brittle logic that can truncate a valid answer. Pass a
+        // 'timeout' only when your own code has decided a request has run too long.
+        $timeout = $options['timeout'] ?? null;
+        if ($timeout !== null && (!is_int($timeout) || $timeout <= 0)) {
             throw new \InvalidArgumentException('vedastro: timeout must be a positive number of seconds');
         }
 
@@ -228,10 +229,12 @@ final class VedAstroClient
      * php.ini and otherwise fails with "unable to get local issuer certificate" - a configuration
      * trap that is easy to miss until it reaches production. Pass
      * `['transport' => new CurlTransport()]` when cURL is set up correctly and you want it.
+     *
+     * @param int|null $timeoutSeconds Null applies no request deadline.
      */
-    private static function defaultTransport(int $timeout): Transport
+    private static function defaultTransport(?int $timeoutSeconds): Transport
     {
-        return new StreamTransport($timeout);
+        return new StreamTransport($timeoutSeconds);
     }
 
     private function decode(string $endpoint, TransportResponse $response): ApiResponse

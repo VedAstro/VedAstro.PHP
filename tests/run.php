@@ -458,8 +458,26 @@ $suite->test('rejects a blank endpoint and unusable options', function (): void 
     expectThrows(
         \InvalidArgumentException::class,
         static fn () => new VedAstroClient(['timeout' => 0]),
-        'a non-positive timeout should be rejected'
+        'a zero timeout should be rejected'
     );
+    expectThrows(
+        \InvalidArgumentException::class,
+        static fn () => new VedAstroClient(['timeout' => -5]),
+        'a negative timeout should be rejected'
+    );
+
+    // The default is no deadline at all, so a long calculation is never cut short. Check the
+    // transport the client actually built, rather than trusting the constructor.
+    $default = new VedAstroClient(['silent' => true]);
+    $property = new \ReflectionProperty(\VedAstro\StreamTransport::class, 'timeoutSeconds');
+    $defaultTransport = (new \ReflectionProperty(VedAstroClient::class, 'transport'))->getValue($default);
+    expect($defaultTransport instanceof \VedAstro\StreamTransport, 'the default transport is the stream wrapper');
+    expectSame(null, $property->getValue($defaultTransport), 'no deadline is imposed by default');
+
+    // An explicit timeout is honoured, and reaches the transport.
+    $limited = new VedAstroClient(['silent' => true, 'timeout' => 42]);
+    $limitedTransport = (new \ReflectionProperty(VedAstroClient::class, 'transport'))->getValue($limited);
+    expectSame(42, $property->getValue($limitedTransport), 'an explicit timeout reaches the transport');
 });
 
 $suite->group('Configuration and facade');

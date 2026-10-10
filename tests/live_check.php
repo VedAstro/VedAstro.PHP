@@ -77,7 +77,6 @@ foreach ($transports as $transportName => $transport) {
 
     $client = new VedAstroClient([
         'apiKey' => $freeTier ? 'FreeAPIUser' : $key,
-        'timeout' => 60,
         'silent' => true,
         'transport' => $transport,
     ]);

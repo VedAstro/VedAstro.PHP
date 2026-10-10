@@ -11,35 +11,52 @@ namespace VedAstro;
  * which is present in virtually every PHP build. Errors are suppressed so the response body of a
  * non-2xx reply can still be read, and the status line is recovered from
  * `$http_response_header` — the only way the stream wrapper exposes it.
+ *
+ * No request deadline is applied unless you supply one: see {@see __construct()}.
  */
 final class StreamTransport implements Transport
 {
+    private readonly ?int $timeoutSeconds;
+
     /**
-     * @param int $timeoutSeconds Seconds to wait for the whole request, including the body.
+     * @param int|null $timeoutSeconds Seconds to wait for the whole request, including the body.
+     *                                 Null, the default, applies no deadline: a VedAstro
+     *                                 calculation can legitimately take minutes, and a library
+     *                                 cannot know what is safe for the caller.
+     *
+     *                                 Note that PHP still applies its own
+     *                                 `default_socket_timeout` (60 seconds as shipped) to each
+     *                                 socket read. That is an environment setting, not something
+     *                                 this library imposes; raise it if you need longer
+     *                                 individual requests.
      */
-    public function __construct(private readonly int $timeoutSeconds = 120)
+    public function __construct(?int $timeoutSeconds = null)
     {
+        $this->timeoutSeconds = $timeoutSeconds;
     }
 
     public function post(string $url, string $body): TransportResponse
     {
-        $context = stream_context_create([
-            'http' => [
-                'method' => 'POST',
-                'header' => implode("\r\n", [
-                    'Content-Type: application/json',
-                    'Accept: application/json, image/svg+xml',
-                    'Content-Length: ' . strlen($body),
-                ]),
-                'content' => $body,
-                'timeout' => $this->timeoutSeconds,
-                // Read the body even on 4xx/5xx instead of failing outright.
-                'ignore_errors' => true,
-                // Follow redirects, matching the other SDKs.
-                'follow_location' => 1,
-                'max_redirects' => 5,
-            ],
-        ]);
+        $http = [
+            'method' => 'POST',
+            'header' => implode("\r\n", [
+                'Content-Type: application/json',
+                'Accept: application/json, image/svg+xml',
+                'Content-Length: ' . strlen($body),
+            ]),
+            'content' => $body,
+            // Read the body even on 4xx/5xx instead of failing outright.
+            'ignore_errors' => true,
+            // Follow redirects, matching the other SDKs.
+            'follow_location' => 1,
+            'max_redirects' => 5,
+        ];
+
+        if ($this->timeoutSeconds !== null) {
+            $http['timeout'] = $this->timeoutSeconds;
+        }
+
+        $context = stream_context_create(['http' => $http]);
 
         // Clear any stale headers from an earlier request, then perform the request. PHP fills
         // $http_response_header for the built-in HTTP wrapper; a custom wrapper cannot reach this

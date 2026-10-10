@@ -28,15 +28,21 @@ final class CurlTransport implements Transport
     ];
 
     private readonly ?string $caBundle;
+    private readonly ?int $timeoutSeconds;
 
     /**
-     * @param int $timeoutSeconds Seconds to wait for the whole request, including the body.
+     * @param int|null $timeoutSeconds Seconds to wait for the whole request, including the body.
+     *                                 Null, the default, applies no deadline: a VedAstro
+     *                                 calculation can legitimately take minutes, and a library
+     *                                 cannot know what is safe for the caller. Set one only when
+     *                                 your own code has decided a request has run too long.
      * @param string|null $caBundle An explicit CA bundle path, or null to detect one.
      */
     public function __construct(
-        private readonly int $timeoutSeconds = 120,
+        ?int $timeoutSeconds = null,
         ?string $caBundle = null,
     ) {
+        $this->timeoutSeconds = $timeoutSeconds;
         $this->caBundle = $caBundle ?? self::detectCaBundle();
     }
 
@@ -68,9 +74,17 @@ final class CurlTransport implements Transport
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_FOLLOWLOCATION => true,
             CURLOPT_MAXREDIRS => 5,
-            CURLOPT_TIMEOUT => $this->timeoutSeconds,
-            CURLOPT_CONNECTTIMEOUT => 30,
         ];
+
+        if ($this->timeoutSeconds !== null) {
+            $options[CURLOPT_TIMEOUT] = $this->timeoutSeconds;
+            $options[CURLOPT_CONNECTTIMEOUT] = $this->timeoutSeconds;
+        } else {
+            // 0 means "no timeout" to libcurl. Set explicitly so a value compiled into libcurl, or
+            // a CURLOPT_* default set elsewhere in the process, cannot impose one silently.
+            $options[CURLOPT_TIMEOUT] = 0;
+            $options[CURLOPT_CONNECTTIMEOUT] = 0;
+        }
 
         if ($this->caBundle !== null) {
             // Verification stays on; cURL is just told where the roots are.

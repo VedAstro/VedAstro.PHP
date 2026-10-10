@@ -560,7 +560,6 @@ Read your key from the environment at start-up:
 ```php
 $client = new VedAstroClient([
     'apiKey' => getenv('VEDASTRO_API_KEY') ?: 'FreeAPIUser',
-    'timeout' => 30,
     'defaultAyanamsa' => Ayanamsa::LAHIRI,
 ]);
 ```
@@ -571,14 +570,43 @@ environment or your framework's secret store.
 | Option | Effect |
 |--------|--------|
 | `apiKey` | Your key, or blank for the free tier |
-| `timeout` | Per-request seconds, including the body (default 120) |
 | `defaultAyanamsa` | Ayanamsa sent with this client's requests |
 | `baseUrl` | Point at a different Calculate service or a test server |
 | `transport` | Supply your own `Transport`, e.g. for stubs or a proxy |
+| `timeout` | Optional request deadline in seconds; **omitted by default** (see below) |
 | `silent` | Suppress the one-line start-up banner |
 
 Invalid configuration is rejected as soon as it is set, so a bad value fails at start-up rather
 than on a live request.
+
+### ⏳ There is no request timeout by default
+
+Deliberately. A VedAstro calculation can take milliseconds or minutes depending on the endpoint and
+the load on the service, and a client library has no way to know what is acceptable for your
+workload. A built-in deadline would be exactly the kind of brittle logic that silently truncates a
+valid answer, so **the library applies none**. If a call is still running, it is still working.
+
+When you do want a deadline — usually because your own request budget demands one — set it
+explicitly:
+
+```php
+$client = new VedAstroClient([
+    'apiKey' => getenv('VEDASTRO_API_KEY'),
+    'timeout' => 30,   // only because *you* decided 30 seconds is too long
+]);
+```
+
+Two deadlines still exist in your environment, and neither comes from this library:
+
+- **`default_socket_timeout`** (ini, 60 seconds as shipped) applies to each socket read on the
+  stream transport. Raise it if a single response can legitimately take longer.
+- **`max_execution_time`** (ini, 30 seconds under a default PHP-FPM pool, unlimited on CLI) kills
+  the whole request with an **uncatchable fatal error**. This is a PHP-FPM setting, not something
+  the SDK can raise for you — so if your calculations can exceed it, either raise
+  `max_execution_time` for that route or move the work to a queue or CLI worker.
+
+To cap cURL instead, pass a timeout to the transport: `new CurlTransport(30)`. Passing `null`, the
+default, tells libcurl explicitly to impose none.
 
 ---
 
@@ -596,7 +624,6 @@ public function register(): void
 {
     $this->app->singleton(VedAstroClient::class, fn () => new VedAstroClient([
         'apiKey' => config('services.vedastro.key'),
-        'timeout' => 30,
         'silent' => true,          // the banner would corrupt a response body
     ]));
 }
@@ -611,7 +638,6 @@ services:
         arguments:
             $options:
                 apiKey: '%env(VEDASTRO_API_KEY)%'
-                timeout: 30
                 silent: true
 ```
 
@@ -640,41 +666,46 @@ public function sunSign(Request $request, VedAstroClient $client): JsonResponse
 Good practice on a server:
 
 - **One client per process, injected.** Do not construct one per request.
-- **Keep the timeout below the web server's own**, so the SDK fails first with a clear error.
+- **Do not set a timeout unless you mean it.** The library applies none, so a slow calculation
+  completes; a fixed deadline would only ever truncate a valid answer. See below for the two
+  deadlines PHP imposes on its own.
 - **Silence the banner** in anything that writes a response body.
 - **Cache by chart input.** The same birth details recur, and a cache hit costs nothing.
 - **Do not retry blindly.** Only idempotent reads are safe, and only on transport errors.
 - **Never log the key.** The SDK already redacts it from every message it raises.
 
-### ⚠️ Fit the timeout inside PHP's own limits
+### ⚠️ The deadlines PHP imposes, and how they fail
 
-This is the one PHP-specific trap worth understanding, because the failure it causes is not
-catchable.
-
-Three deadlines apply to a request, and **the shortest one wins**:
+The library adds no deadline, but your environment does. Two settings apply, and **the shortest
+wins**:
 
 | Deadline | Typical value | How it fails |
 |----------|---------------|--------------|
-| `VedAstroClient` `timeout` | 120s by default | `VedAstroException`, catchable |
-| `default_socket_timeout` (ini) | 60s | stream read fails, catchable |
+| `default_socket_timeout` (ini) | 60s | stream read fails; **catchable** as `VedAstroException` |
 | `max_execution_time` (ini) | 30s under PHP-FPM, unlimited on CLI | **fatal error, not catchable** |
 
-The SDK's 120-second default is longer than the 30 seconds PHP-FPM usually allows, so a slow
-request is killed by PHP before the client can raise its own exception — the caller gets a fatal
-error instead of a `VedAstroException` it can handle. Set the client timeout comfortably below
-`max_execution_time`:
+`max_execution_time` is the dangerous one, and it is a PHP-FPM setting rather than anything the SDK
+controls: it kills the whole request, so the caller never gets a `VedAstroException` to handle.
+If a calculation can exceed it, raise the limit for that route, or — better, since a long remote
+call does not belong in a page request — move the work behind a queue or a CLI worker where
+`max_execution_time` is 0.
 
 ```php
-// PHP-FPM default is 30s, so fail at 25s and stay catchable.
+// A CLI worker or queue consumer: unlimited execution, so nothing truncates the call.
+$client = new VedAstroClient(['apiKey' => getenv('VEDASTRO_API_KEY'), 'silent' => true]);
+$result = $client->calculate()->horoscopePredictions($birth);
+```
+
+If you *do* want the library to stop a call — because your own budget says so, not because the
+library guessed — set it explicitly and pick a value your `max_execution_time` allows:
+
+```php
 $client = new VedAstroClient([
     'apiKey' => getenv('VEDASTRO_API_KEY'),
-    'timeout' => 25,
+    'timeout' => 25,   // below a 30s max_execution_time, so it stays catchable
     'silent' => true,
 ]);
 ```
-
-For a long-running CLI worker or queue consumer, where `max_execution_time` is 0 (unlimited),
-raise the client timeout instead — `['timeout' => 120]` — and pace calls yourself.
 
 Two more PHP specifics:
 

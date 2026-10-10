@@ -65,13 +65,17 @@ returns a bare string.
 (`GeoLocation::of($name, $longitude, $latitude)`), and the rate limit.
 `ApiException::getMessage()` carries the API's own explanation.
 
-**How do I stop a request that is taking too long?** Set a short `timeout` option on the client so
-it fails fast. This matters more than it looks: the SDK's 120-second default is longer than the
-30 seconds PHP-FPM usually allows (`max_execution_time`), and PHP's own limit produces a **fatal
-error the caller cannot catch**, whereas the SDK's timeout raises a catchable
-`VedAstroException`. Set the client timeout comfortably below `max_execution_time` — 25 seconds
-under a default PHP-FPM pool. On CLI, where `max_execution_time` is 0, the client timeout is the
-only deadline.
+**Is there a request timeout?** No, and that is deliberate. A VedAstro calculation can take
+milliseconds or minutes, and a library cannot know what is acceptable for your workload, so a
+built-in deadline would only ever truncate a valid answer. If a call is still running, it is still
+working.
+
+**How do I make a request stop if it takes too long?** Set the `timeout` option yourself — but only
+if your own budget demands it: `new VedAstroClient(['timeout' => 25])`. Two deadlines come from PHP
+rather than the SDK: `default_socket_timeout` (60s) applies per socket read and fails catchably,
+while `max_execution_time` (30s under a default PHP-FPM pool, 0 on CLI) kills the request with an
+**uncatchable fatal error**. If a calculation can exceed `max_execution_time`, raise the limit for
+that route or move the work to a queue or CLI worker.
 
 **Can two requests use different ayanamsas at once?** PHP handles one request per process, so
 `withAyanamsa()` is per call: it applies the override, runs your closure, then restores the

@@ -84,7 +84,10 @@ echo 'Ascendant: ', houseSignHandler('14:30 25/10/1992 +05:30', 72.8777, 19.0760
 
 // SERVING THIS IN PRODUCTION
 // - One client per process, injected. The class is immutable and stateless between calls.
-// - Keep the client timeout below the web server's, so the SDK fails first with a clear error.
+// - Keep the client timeout BELOW PHP's max_execution_time, which defaults to 30s under a
+//   PHP-FPM pool. PHP's own limit is a fatal error the caller cannot catch, whereas the SDK's
+//   timeout raises a catchable VedAstroException - so let the SDK fail first. The default of
+//   120s is fine on CLI, where max_execution_time is 0.
 // - Cache by chart input with your framework's cache; charts rarely change.
 // - Retry only idempotent reads, and only on transport failures - never on an ApiException,
 //   which means the API actively rejected the request.

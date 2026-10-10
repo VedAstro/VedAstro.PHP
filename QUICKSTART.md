@@ -69,7 +69,9 @@ See the [demo list](README.md#-common-use-cases--demo-files) for the rest.
 - **Optional arguments** — thirty calculators have an options class in `VedAstro\Generated`.
   A null property is omitted, so the server applies its own default.
 - **Servers** — build one `VedAstroClient` per process and inject it; silence the banner in
-  anything that writes a response body. See
+  anything that writes a response body. Keep the client `timeout` below PHP's
+  `max_execution_time` (30s under a default PHP-FPM pool), because PHP's limit kills the request
+  with an uncatchable fatal error while the SDK's timeout raises a catchable exception. See
   [Using it in a server](README.md#-using-it-in-a-server).
 - **Rate limits** — the free tier allows five requests per minute across all processes. Use
   `usleep()` for an exact 13-second gap; `sleep()` takes whole seconds.

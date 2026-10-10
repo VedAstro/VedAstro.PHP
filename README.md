@@ -646,6 +646,46 @@ Good practice on a server:
 - **Do not retry blindly.** Only idempotent reads are safe, and only on transport errors.
 - **Never log the key.** The SDK already redacts it from every message it raises.
 
+### ⚠️ Fit the timeout inside PHP's own limits
+
+This is the one PHP-specific trap worth understanding, because the failure it causes is not
+catchable.
+
+Three deadlines apply to a request, and **the shortest one wins**:
+
+| Deadline | Typical value | How it fails |
+|----------|---------------|--------------|
+| `VedAstroClient` `timeout` | 120s by default | `VedAstroException`, catchable |
+| `default_socket_timeout` (ini) | 60s | stream read fails, catchable |
+| `max_execution_time` (ini) | 30s under PHP-FPM, unlimited on CLI | **fatal error, not catchable** |
+
+The SDK's 120-second default is longer than the 30 seconds PHP-FPM usually allows, so a slow
+request is killed by PHP before the client can raise its own exception — the caller gets a fatal
+error instead of a `VedAstroException` it can handle. Set the client timeout comfortably below
+`max_execution_time`:
+
+```php
+// PHP-FPM default is 30s, so fail at 25s and stay catchable.
+$client = new VedAstroClient([
+    'apiKey' => getenv('VEDASTRO_API_KEY'),
+    'timeout' => 25,
+    'silent' => true,
+]);
+```
+
+For a long-running CLI worker or queue consumer, where `max_execution_time` is 0 (unlimited),
+raise the client timeout instead — `['timeout' => 120]` — and pace calls yourself.
+
+Two more PHP specifics:
+
+- **The client is per-request, not per-application.** PHP's shared-nothing model tears down the
+  process after each request, so "create it once" means once per request unless you run a
+  persistent runtime (Swoole, RoadRunner, FrankenPHP). Under those, hold the client in the worker
+  and reuse it across requests.
+- **Nothing is retried for you, and PHP has no threads.** To raise throughput, add workers or use
+  `curl_multi` behind a custom `Transport`; the rate limit is counted per key across every worker,
+  so pace centrally (a token bucket in Redis) rather than per process.
+
 👉 **See full example:** [`examples/server_usage.php`](examples/server_usage.php)
 
 ---

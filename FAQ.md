@@ -66,7 +66,12 @@ returns a bare string.
 `ApiException::getMessage()` carries the API's own explanation.
 
 **How do I stop a request that is taking too long?** Set a short `timeout` option on the client so
-it fails fast, rather than relying on the web server's own timeout.
+it fails fast. This matters more than it looks: the SDK's 120-second default is longer than the
+30 seconds PHP-FPM usually allows (`max_execution_time`), and PHP's own limit produces a **fatal
+error the caller cannot catch**, whereas the SDK's timeout raises a catchable
+`VedAstroException`. Set the client timeout comfortably below `max_execution_time` — 25 seconds
+under a default PHP-FPM pool. On CLI, where `max_execution_time` is 0, the client timeout is the
+only deadline.
 
 **Can two requests use different ayanamsas at once?** PHP handles one request per process, so
 `withAyanamsa()` is per call: it applies the override, runs your closure, then restores the
